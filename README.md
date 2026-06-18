@@ -12,10 +12,6 @@ To run the sketch locally, open `index.html` in Google Chrome using Live Server.
 
 Explore the world, survive enemy waves as you move north, then enter the glowing boss zone to fight the giant orange blob. Watch the minimap to track enemies off screen.
 
-
-**Editing the Waves and Boss**
-Open `data/enemies.json` to change when waves spawn, how many enemies appear, their speed, and the boss stats. Each wave has a `spawnAt` world Y value — lower values trigger later since the player starts at the bottom of the world.
-
 **Opening the Chrome Console**
 - **Windows:** Press `F12` or `Ctrl + Shift + J`, then click the **Console** tab
 - **Mac:** Press `Cmd + Option + J`
