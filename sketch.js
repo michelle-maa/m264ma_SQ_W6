@@ -92,10 +92,22 @@ let bossData = null;
 const BOSS_ZONE_Y = 300; // world Y — enter this zone to trigger boss
 
 // ------------------------------------------------------------
-// BACKGROUND SHAPES
-// Scattered across the world — drawn in world coordinates.
+// BACKGROUND 
 // ------------------------------------------------------------
-let bgShapes = [];
+let bgImage; 
+
+// ------------------------------------------------------------
+// SPRITE SHEET 
+// ------------------------------------------------------------
+let playerSheet; 
+let playerSprites = [];
+let frameIndex = 0;
+let animSpeed = 0.2; // controls animation speed
+
+const ANIM_IDLE_START = 56;   // row 7 (index 56–63)
+const ANIM_WALK_START = 16;   // row 3 (index 16–23)
+const ANIM_SHOOT_START = 32;  // row 5 (index 32–39)
+const FRAMES_PER_ACTION = 8;
 
 // ------------------------------------------------------------
 // MINIMAP
@@ -119,23 +131,31 @@ const STATE_WIN = "win";
 const STATE_OVER = "over";
 let gameState = STATE_PLAY;
 
+let music; 
+let shootSound;
+let playerHitSound;
+
 // ------------------------------------------------------------
 // SOUNDS — uncomment and fill in paths to add audio
 // ------------------------------------------------------------
-// let shootSound;
 // let hitSound;
-// let playerHitSound;
 // let bossHitSound;
 // let bossMusic;
 // let winSound;
-// let music;
 
 // ============================================================
 // preload()
 // ============================================================
 function preload() {
+  bgImage = loadImage("assets/images/bg_image.jpeg");
+  playerSheet = loadImage("assets/images/pixel_sprite_sheet.png");
+
   enemyData    = loadJSON("data/enemies.json");
   obstacleData = loadJSON("data/obstacles.json");
+
+  music = loadSound("assets/sounds/bg_music.wav");
+  shootSound = loadSound("assets/sounds/gun_shot.mp3");
+  playerHitSound = loadSound("assets/sounds/player_hurt.flac");
 
   // Uncomment to load sounds:
   // shootSound     = loadSound("assets/sounds/shoot.wav");
@@ -160,25 +180,20 @@ function setup() {
     obstacles.push({ x: o.x, y: o.y, size: o.size });
   }
 
-  // Generate background shapes across the world
-  for (let i = 0; i < 120; i++) {
-    bgShapes.push({
-      x: random(WORLD_W),
-      y: random(WORLD_H),
-      type: random() > 0.5 ? "circle" : "rect",
-      size: random(10, 50),
-      r: floor(random(30, 70)),
-      g: floor(random(30, 70)),
-      b: floor(random(50, 100)),
-    });
-  }
-
   // Start camera so player is visible
   camX = player.x - width / 2;
   camY = player.y - height / 2;
 
-  // Uncomment to start music:
-  // music.loop();
+  // Example: 8 columns × 8 rows
+  let frameW = playerSheet.width / 8;   // 96
+  let frameH = playerSheet.height / 8;  // 96
+
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      let frame = playerSheet.get(x * frameW, y * frameH, frameW, frameH);
+      playerSprites.push(frame);
+    }
+  }
 }
 
 // ============================================================
@@ -189,11 +204,13 @@ function draw() {
 
   updateCamera();
 
-  // Everything inside push/pop is drawn in world coordinates
+  // WORLD SPACE
   push();
   translate(-camX, -camY);
 
-  drawBackground();
+  // Draw background image ONCE
+  image(bgImage, 0, 0, WORLD_W, WORLD_H);
+
   drawBossZone();
 
   if (gameState === STATE_PLAY) {
@@ -340,7 +357,7 @@ function checkObstaclePlayerCollision() {
         player.bounceVY = (dy / len) * 8;
       }
 
-      // playerHitSound.play();
+      playerHitSound.play();
 
       if (player.health <= 0) {
         gameState = STATE_OVER;
@@ -367,38 +384,7 @@ function applyBounce() {
   }
 }
 
-// ------------------------------------------------------------
-// drawBackground()
-// Draws background shapes in world coordinates.
-// Only shapes near the camera are drawn for performance.
-// ------------------------------------------------------------
-function drawBackground() {
-  noStroke();
-  for (let i = 0; i < bgShapes.length; i++) {
-    let s = bgShapes[i];
 
-    // Skip shapes far from the camera view
-    if (
-      s.x < camX - s.size || s.x > camX + width + s.size ||
-      s.y < camY - s.size || s.y > camY + height + s.size
-    ) continue;
-
-    fill(s.r, s.g, s.b, 160);
-
-    if (s.type === "circle") {
-      ellipse(s.x, s.y, s.size);
-    } else {
-      rect(s.x - s.size / 2, s.y - s.size / 2, s.size, s.size, 3);
-    }
-  }
-
-  // World boundary outline
-  noFill();
-  stroke(60, 50, 80);
-  strokeWeight(4);
-  rect(0, 0, WORLD_W, WORLD_H);
-  noStroke();
-}
 
 // ------------------------------------------------------------
 // drawBossZone()
@@ -430,10 +416,29 @@ function drawBossZone() {
 // Spacebar fires in the current facing direction.
 // ------------------------------------------------------------
 function handleInput() {
-  if (keyIsDown(87)) { player.y -= PLAYER_SPEED; player.direction = { x: 0,  y: -1 }; }
-  if (keyIsDown(83)) { player.y += PLAYER_SPEED; player.direction = { x: 0,  y:  1 }; }
-  if (keyIsDown(65)) { player.x -= PLAYER_SPEED; player.direction = { x: -1, y:  0 }; }
-  if (keyIsDown(68)) { player.x += PLAYER_SPEED; player.direction = { x:  1, y:  0 }; }
+  let moving = false;
+
+  if (keyIsDown(87)) { player.y -= PLAYER_SPEED; player.direction = { x: 0,  y: -1 }; moving = true; }
+  if (keyIsDown(83)) { player.y += PLAYER_SPEED; player.direction = { x: 0,  y:  1 }; moving = true; }
+  if (keyIsDown(65)) { player.x -= PLAYER_SPEED; player.direction = { x: -1, y:  0 }; moving = true; }
+  if (keyIsDown(68)) { player.x += PLAYER_SPEED; player.direction = { x:  1, y:  0 }; moving = true; }
+
+  player.isMoving = moving;
+
+  if (keyIsDown(32) && player.shootTimer === 0) {
+    player.isShooting = true;
+    setTimeout(() => player.isShooting = false, 150);
+
+    bullets.push({
+      x:  player.x + player.direction.x * (player.r + 4),
+      y:  player.y + player.direction.y * (player.r + 4),
+      vx: player.direction.x * BULLET_SPEED,
+      vy: player.direction.y * BULLET_SPEED,
+    });
+
+    player.shootTimer = SHOOT_COOLDOWN;
+    shootSound.play();
+  }
 
   // Keep player inside world bounds
   player.x = constrain(player.x, player.r, WORLD_W - player.r);
@@ -441,16 +446,6 @@ function handleInput() {
 
   if (player.shootTimer > 0) player.shootTimer--;
 
-  if (keyIsDown(32) && player.shootTimer === 0) {
-    bullets.push({
-      x:  player.x + player.direction.x * (player.r + 4),
-      y:  player.y + player.direction.y * (player.r + 4),
-      vx: player.direction.x * BULLET_SPEED,
-      vy: player.direction.y * BULLET_SPEED,
-    });
-    player.shootTimer = SHOOT_COOLDOWN;
-    // shootSound.play();
-  }
 }
 
 // ------------------------------------------------------------
@@ -639,7 +634,7 @@ function checkBossPlayerCollision() {
     player.health--;
     player.invincible      = true;
     player.invincibleTimer = INVINCIBLE_FRAMES;
-    // playerHitSound.play();
+    playerHitSound.play();
 
     if (player.health <= 0) {
       gameState = STATE_OVER;
@@ -660,7 +655,7 @@ function checkEnemyPlayerCollision() {
       player.health--;
       player.invincible      = true;
       player.invincibleTimer = INVINCIBLE_FRAMES;
-      // playerHitSound.play();
+      playerHitSound.play();
 
       if (player.health <= 0) {
         gameState = STATE_OVER;
@@ -784,35 +779,25 @@ function drawBullets() {
 // Drawn in world coordinates. Flickers while invincible.
 // ------------------------------------------------------------
 function drawPlayer() {
+  // Flicker only when invincible
   if (player.invincible && floor(player.invincibleTimer / 6) % 2 === 0) return;
 
-  push();
-  fill(0, 200, 180);
-  noStroke();
-
-  beginShape();
-  let numPoints = 48;
-  for (let i = 0; i < numPoints; i++) {
-    let angle    = (TWO_PI / numPoints) * i;
-    let noiseVal = noise(cos(angle) * 0.8 + player.blobT, sin(angle) * 0.8 + player.blobT);
-    let r        = player.r + map(noiseVal, 0, 1, -6, 6);
-    vertex(player.x + cos(angle) * r, player.y + sin(angle) * r);
+  // 1. Decide which animation row to use
+  let animStart;
+  if (player.isShooting) {
+    animStart = ANIM_SHOOT_START;
+  } else if (player.isMoving) {
+    animStart = ANIM_WALK_START;
+  } else {
+    animStart = ANIM_IDLE_START;
   }
-  endShape(CLOSE);
 
-  fill(10);
-  ellipse(player.x - 7, player.y - 5, 7, 7);
-  ellipse(player.x + 7, player.y - 5, 7, 7);
+  // 2. Compute frame index safely
+  let frameOffset = floor((frameCount * animSpeed) % FRAMES_PER_ACTION);
+  frameIndex = animStart + frameOffset;
 
-  fill(255);
-  ellipse(
-    player.x + player.direction.x * (player.r - 4),
-    player.y + player.direction.y * (player.r - 4),
-    8
-  );
-
-  pop();
-  player.blobT += 0.015;
+  // 3. Draw centered sprite
+  image(playerSprites[frameIndex], player.x - 32, player.y - 32, 64, 64);
 }
 
 // ------------------------------------------------------------
@@ -1012,6 +997,11 @@ function drawGameOver() {
 // R restarts. B skips to boss fight.
 // ------------------------------------------------------------
 function keyPressed() {
+  // Start background music on first key press
+  if (!music.isPlaying()) {
+    music.loop();
+  }
+
   // B — skip to boss fight for testing
   if (key === "b" || key === "B") {
     player.y = BOSS_ZONE_Y - 10;
